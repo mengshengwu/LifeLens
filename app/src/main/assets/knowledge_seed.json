@@ -1,0 +1,12 @@
+[
+  {
+    "label": "microwave",
+    "shortElderly": "This is a microwave. Put food inside, close the door, set time, then press Start. Do not put metal inside.",
+    "shortChild": "This warms up food. Don’t touch it when it’s hot. Ask an adult to use it."
+  },
+  {
+    "label": "sunflower",
+    "shortElderly": "This looks like a sunflower. It is a common garden plant that follows sunlight.",
+    "shortChild": "Sunflowers are big yellow flowers. They like the sun a lot!"
+  }
+]
