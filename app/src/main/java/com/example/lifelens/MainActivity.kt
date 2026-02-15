@@ -378,7 +378,6 @@ class MainActivity : ComponentActivity() {
                 }
 
 
-
                 Surface(modifier = Modifier.fillMaxSize()) {
                     when (phase) {
                         Phase.INTRO -> {
