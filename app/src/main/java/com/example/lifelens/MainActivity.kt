@@ -90,7 +90,10 @@ class MainActivity : ComponentActivity() {
                             Build.PRODUCT.contains("sdk", true)
                 }
                 // default plugin: emulator -> cpu, device -> npu
-                var pluginId by remember { mutableStateOf(if (isEmulator) "cpu" else "npu") }
+                // var pluginId by remember { mutableStateOf(if (isEmulator) "cpu" else "npu") }
+
+                var pluginId by remember { mutableStateOf("npu") }
+                // var pluginId by remember { mutableStateOf("cpu_gpu") }
 
                 // camera
                 val previewView = remember { PreviewView(context) }
@@ -175,27 +178,44 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                suspend fun createAndInitClient(pid: String): Result<NexaVlmClient> = withContext(Dispatchers.IO) {
-                    runCatching {
-                        val entryPath = modelManager.entryPath(spec)
-                        val entry = File(entryPath)
 
-                        Log.d("LifeLens", "createAndInitClient(pid=$pid)")
-                        Log.d("LifeLens", "entryPath=$entryPath exists=${entry.exists()} isFile=${entry.isFile} len=${entry.length()}")
+                suspend fun createAndInitClient(pid: String): Result<NexaVlmClient> =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            // ✅ 只允许 npu / cpu_gpu
+                            val plugin = pid.trim().lowercase()
+                            require(plugin == "npu" || plugin == "cpu_gpu") {
+                                "Invalid pluginId=$pid. Use \"npu\" or \"cpu_gpu\"."
+                            }
 
-                        require(entry.exists() && entry.isFile && entry.length() > 0L) {
-                            "Model entry file missing: ${entry.absolutePath}"
+                            // ✅ entry file：files-1-1.nexa
+                            val entryPath = modelManager.entryPath(spec)
+                            val entry = File(entryPath)
+
+                            Log.d("LifeLens", "createAndInitClient(plugin=$plugin)")
+                            Log.d(
+                                "LifeLens",
+                                "entryPath=$entryPath exists=${entry.exists()} isFile=${entry.isFile} len=${entry.length()}"
+                            )
+
+                            require(entry.exists() && entry.isFile && entry.length() > 0L) {
+                                "Model entry file missing: ${entry.absolutePath}"
+                            }
+
+                            val c = NexaVlmClient(
+                                context = context,
+                                modelPath = entry.absolutePath,   // ✅ 只传 entry 文件
+                                pluginId = plugin                // ✅ "npu" or "cpu_gpu"
+                            )
+
+                            c.init()
+                            c
                         }
-
-                        val c = NexaVlmClient(
-                            context = context,
-                            modelPath = entryPath,
-                            pluginId = pid
-                        )
-                        c.init()
-                        c
                     }
-                }
+
+
+
+
 
                 fun handleAskWithImage() {
                     val q = questionText.trim()
@@ -319,21 +339,22 @@ class MainActivity : ComponentActivity() {
 
                             // 3) init
                             headline = "Initializing..."
-                            detail = if (pluginId == "cpu") "Starting on CPU…" else "Starting on NPU…"
+                            detail = if (pluginId == "npu") "Starting on NPU…" else "Starting on CPU/GPU…"
                             progress = null
 
-                            val r1 = createAndInitClient(pluginId)
-                            if (r1.isSuccess) {
+                            val r = createAndInitClient(pluginId)
+                            if (r.isSuccess) {
                                 runCatching { activeClient?.destroy() }
-                                activeClient = r1.getOrNull()
+                                activeClient = r.getOrThrow()
                             } else {
-                                throw r1.exceptionOrNull() ?: RuntimeException("Init failed (unknown)")
+                                throw r.exceptionOrNull() ?: RuntimeException("Init failed (unknown)")
                             }
 
                             // 4) camera
                             headline = "Almost ready"
                             detail = "We’ll ask for camera permission so you can capture."
                             progress = null
+
                             if (!cameraGranted) cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                             bindCamera()
 
@@ -342,17 +363,13 @@ class MainActivity : ComponentActivity() {
                             headline = "Ready"
                             detail = "Upload or Capture, ask a question, or run Quick Test."
                             progress = null
+
                         } catch (t: Throwable) {
+                            Log.e("LifeLens", "Setup failed", t)
                             setupError = buildString {
                                 append(t.message ?: "Unknown error")
-                                val st = t.stackTraceToString().take(2000)
-                                if (st.isNotBlank()) {
-                                    append("\n\n")
-                                    append(st)
-                                }
-                                if (isEmulator) {
-                                    append("\n\nTip: Emulator often can't load a 4.9GB on-device model. Try a physical device.")
-                                }
+                                val st = t.stackTraceToString().take(2500)
+                                if (st.isNotBlank()) append("\n\n").append(st)
                             }
                             headline = "Setup failed"
                             detail = "See details below."
@@ -363,6 +380,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+
 
                 Surface(modifier = Modifier.fillMaxSize()) {
                     when (phase) {
@@ -664,12 +682,10 @@ private fun ReadyScreen(
                     )
 
                     Spacer(Modifier.height(6.dp))
-
                     Text(
-                        "${f.name} · ${f.length()} bytes",
+                        "Photo loaded",
                         style = MaterialTheme.typography.bodySmall
                     )
-
                     Spacer(Modifier.height(8.dp))
 
                     val bitmap = remember(uploadedImagePath) {

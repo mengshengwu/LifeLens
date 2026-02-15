@@ -60,8 +60,7 @@ class ModelManager(private val context: Context) {
                 "weights-7-8.nexa",
                 "weights-8-8.nexa"
             ),
-            entryFile = "files-1-1.nexa",
-            mmprojFile = "attachments-1-3.nexa"
+            entryFile = "files-1-1.nexa"
         )
     )
 
